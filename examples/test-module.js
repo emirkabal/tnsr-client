@@ -1,19 +1,20 @@
-// Test modül kullanımı - CommonJS
-const { TNSRClient, createTnsrClient, formatBytes, VERSION } = require('../dist/index.js');
+const { createTnsrClient } = require("tnsr-client");
 
-console.log('TNSR Client Version:', VERSION);
-
-// Test client creation
 const client = createTnsrClient({
-  url: 'http://localhost:8080',
-  username: 'test',
-  password: 'test123'
+  url: "http://192.168.1.1:8080",
+  username: "username",
+  password: "password",
 });
 
-console.log('Client created successfully:', client instanceof TNSRClient);
+client
+  .testConnection()
+  .then(() => {
+    console.log("Connection successful!");
+  })
+  .catch((error) => {
+    console.error("Connection failed:", error);
+  });
 
-client.testConnection().then(result => {
-  console.log('Connection test result:', result);
-}).catch(error => {
-  console.error('Error testing connection:', error);
+client.listNetworks().then((networks) => {
+  console.log("Available networks:", networks);
 });

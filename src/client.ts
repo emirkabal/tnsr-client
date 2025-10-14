@@ -1,5 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
-
+import axios, { AxiosInstance } from "axios";
 
 export interface NetworkInfo {
   network: string;
@@ -43,22 +42,28 @@ export interface PbrRouteInfo {
   rules: PrefixListRule[];
 }
 
-export interface BlackholeRouteInfo {
-  sequence: number;
-  prefix: string;
-}
-
 export interface RouteMapRule {
   sequence: number;
   policy: string;
   match?: {
-    'ip-address-prefix-list'?: string;
+    "ip-address-prefix-list"?: string;
   };
   set?: {
     ip?: {
-      'next-hop': string;
+      "next-hop": string;
     };
   };
+}
+
+export interface RouteTableInfo {
+  routeTableName: string;
+  totalRoutes: number;
+  routes: Array<{
+    destinationPrefix: string;
+    hasDrop: boolean;
+    firstHop: string | null;
+    hops: any[];
+  }>;
 }
 
 export interface RouteMapInfo {
@@ -123,63 +128,63 @@ export class TNSRClient {
       baseURL: baseUrl,
       auth: {
         username,
-        password
+        password,
       },
       headers: {
-        'Content-Type': 'application/yang-data+json',
-        'Accept': 'application/yang-data+json'
+        "Content-Type": "application/yang-data+json",
+        Accept: "application/yang-data+json",
       },
-      timeout: 30000
+      timeout: 30000,
     });
   }
 
-
-  async testConnection(): Promise<ApiResponse<{ status: number; message: string }>> {
+  async testConnection(): Promise<
+    ApiResponse<{ status: number; message: string }>
+  > {
     try {
-      const response = await this.api.get('/restconf/data', { timeout: 5000 });
+      const response = await this.api.get("/restconf/data", { timeout: 5000 });
       return {
         success: true,
         data: {
           status: response.status,
-          message: 'TNSR API connection successful'
-        }
+          message: "TNSR API connection successful",
+        },
       };
     } catch (error: any) {
-      let errorMessage = 'Unknown error';
+      let errorMessage = "Unknown error";
 
-      if (error.code === 'ECONNREFUSED') {
+      if (error.code === "ECONNREFUSED") {
         errorMessage = `Cannot connect to TNSR API server (${this.baseUrl}). Is server running?`;
       } else if (error.response?.status === 401) {
-        errorMessage = 'Authentication failed. Check username/password.';
+        errorMessage = "Authentication failed. Check username/password.";
       } else if (error.response?.status === 404) {
-        errorMessage = 'RESTCONF endpoint not found. Is TNSR RESTCONF service active?';
+        errorMessage =
+          "RESTCONF endpoint not found. Is TNSR RESTCONF service active?";
       } else {
         errorMessage = error.message;
       }
 
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       };
     }
   }
 
-
   async listInterfaces(): Promise<ApiResponse<InterfaceInfo[]>> {
     try {
-
       const endpoints = [
-        '/restconf/data/netgate-interface:interfaces-config',
-        '/restconf/data/netgate-interface:interfaces-state',
-        '/restconf/data/netgate-interface:interfaces',
-        '/restconf/data/ietf-interfaces:interfaces',
-        '/restconf/data/ietf-interfaces:interfaces-state',
-        '/restconf/data/interfaces',
-        '/restconf/data/interfaces-state'
+        "/restconf/data/netgate-interface:interfaces-config",
+        "/restconf/data/netgate-interface:interfaces-state",
+        "/restconf/data/netgate-interface:interfaces",
+        "/restconf/data/ietf-interfaces:interfaces",
+        "/restconf/data/ietf-interfaces:interfaces-state",
+        "/restconf/data/interfaces",
+        "/restconf/data/interfaces-state",
       ];
 
       let response: any = null;
-      let usedEndpoint = '';
+      let usedEndpoint = "";
 
       for (const endpoint of endpoints) {
         try {
@@ -194,43 +199,39 @@ export class TNSRClient {
       if (!response) {
         return {
           success: false,
-          error: 'No working interface endpoint found',
-          message: 'Use CLI: show interface summary'
+          error: "No working interface endpoint found",
+          message: "Use CLI: show interface summary",
         };
       }
-
 
       const interfaces = this.parseInterfaceList(response.data, usedEndpoint);
 
       return {
         success: true,
         data: interfaces,
-        message: `Found ${interfaces.length} interfaces using ${usedEndpoint}`
+        message: `Found ${interfaces.length} interfaces using ${usedEndpoint}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
   private parseInterfaceList(data: any, endpoint: string): InterfaceInfo[] {
     let interfaces: any[] = [];
 
-
-    if (data['netgate-interface:interfaces-config']?.interface) {
-      interfaces = data['netgate-interface:interfaces-config'].interface;
-    } else if (data['netgate-interface:interfaces-state']?.interface) {
-      interfaces = data['netgate-interface:interfaces-state'].interface;
-    } else if (data['netgate-interface:interfaces']?.interface) {
-      interfaces = data['netgate-interface:interfaces'].interface;
-    } else if (data['ietf-interfaces:interfaces']?.interface) {
-      interfaces = data['ietf-interfaces:interfaces'].interface;
-    } else if (data['ietf-interfaces:interfaces-state']?.interface) {
-      interfaces = data['ietf-interfaces:interfaces-state'].interface;
+    if (data["netgate-interface:interfaces-config"]?.interface) {
+      interfaces = data["netgate-interface:interfaces-config"].interface;
+    } else if (data["netgate-interface:interfaces-state"]?.interface) {
+      interfaces = data["netgate-interface:interfaces-state"].interface;
+    } else if (data["netgate-interface:interfaces"]?.interface) {
+      interfaces = data["netgate-interface:interfaces"].interface;
+    } else if (data["ietf-interfaces:interfaces"]?.interface) {
+      interfaces = data["ietf-interfaces:interfaces"].interface;
+    } else if (data["ietf-interfaces:interfaces-state"]?.interface) {
+      interfaces = data["ietf-interfaces:interfaces-state"].interface;
     } else if (data.interfaces?.interface) {
       interfaces = data.interfaces.interface;
     } else if (data.interface) {
@@ -240,74 +241,97 @@ export class TNSRClient {
     }
 
     return interfaces.map((iface: any) => {
-      const ipv4Addresses: Array<{ ip: string; prefixLength: number; network: string }> = [];
+      const ipv4Addresses: Array<{
+        ip: string;
+        prefixLength: number;
+        network: string;
+      }> = [];
 
-
-      const ipv4Data = iface['ietf-ip:ipv4'] || iface.ipv4 || iface['netgate-interface:ipv4'] || {};
+      const ipv4Data =
+        iface["ietf-ip:ipv4"] ||
+        iface.ipv4 ||
+        iface["netgate-interface:ipv4"] ||
+        {};
       if (ipv4Data.address && Array.isArray(ipv4Data.address)) {
         ipv4Data.address.forEach((addr: any) => {
           const ip = addr.ip;
-          const prefix = addr['prefix-length'] || addr.prefixLength || 24;
+          const prefix = addr["prefix-length"] || addr.prefixLength || 24;
 
-
-          const ipParts = ip.split('.').map(Number);
+          const ipParts = ip.split(".").map(Number);
           const maskBits = parseInt(prefix.toString());
-          const mask = (0xFFFFFFFF << (32 - maskBits)) >>> 0;
-          const networkInt = (ipParts[0] << 24 | ipParts[1] << 16 | ipParts[2] << 8 | ipParts[3]) & mask;
+          const mask = (0xffffffff << (32 - maskBits)) >>> 0;
+          const networkInt =
+            ((ipParts[0] << 24) |
+              (ipParts[1] << 16) |
+              (ipParts[2] << 8) |
+              ipParts[3]) &
+            mask;
           const networkParts = [
-            (networkInt >>> 24) & 0xFF,
-            (networkInt >>> 16) & 0xFF,
-            (networkInt >>> 8) & 0xFF,
-            networkInt & 0xFF
+            (networkInt >>> 24) & 0xff,
+            (networkInt >>> 16) & 0xff,
+            (networkInt >>> 8) & 0xff,
+            networkInt & 0xff,
           ];
-          const network = `${networkParts.join('.')}/${prefix}`;
+          const network = `${networkParts.join(".")}/${prefix}`;
 
           ipv4Addresses.push({
             ip,
             prefixLength: prefix,
-            network
+            network,
           });
         });
       }
 
-
       const stats = iface.statistics || iface.stats || {};
-      const statistics = stats ? {
-        rxPackets: stats['in-unicast-pkts'] || stats.inUnicastPkts || stats.rxPackets || 0,
-        txPackets: stats['out-unicast-pkts'] || stats.outUnicastPkts || stats.txPackets || 0,
-        rxBytes: stats['in-octets'] || stats.inOctets || stats.rxBytes || 0,
-        txBytes: stats['out-octets'] || stats.outOctets || stats.txBytes || 0
-      } : undefined;
+      const statistics = stats
+        ? {
+          rxPackets:
+            stats["in-unicast-pkts"] ||
+            stats.inUnicastPkts ||
+            stats.rxPackets ||
+            0,
+          txPackets:
+            stats["out-unicast-pkts"] ||
+            stats.outUnicastPkts ||
+            stats.txPackets ||
+            0,
+          rxBytes: stats["in-octets"] || stats.inOctets || stats.rxBytes || 0,
+          txBytes:
+            stats["out-octets"] || stats.outOctets || stats.txBytes || 0,
+        }
+        : undefined;
 
       return {
-        name: iface.name || iface.ifName || 'unknown',
-        adminStatus: iface['admin-status'] || iface.adminStatus || 'unknown',
-        operStatus: iface['oper-status'] || iface.operStatus || iface.status || 'unknown',
+        name: iface.name || iface.ifName || "unknown",
+        adminStatus: iface["admin-status"] || iface.adminStatus || "unknown",
+        operStatus:
+          iface["oper-status"] || iface.operStatus || iface.status || "unknown",
         type: iface.type || iface.ifType,
         ipv4Addresses,
-        statistics
+        statistics,
       };
     });
   }
 
-
   async listNetworks(): Promise<ApiResponse<NetworkInfo[]>> {
     try {
-
-      const response = await this.api.get('/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists');
-      const prefixLists = response.data?.['netgate-frr:prefix-lists']?.list || [];
+      const response = await this.api.get(
+        "/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists"
+      );
+      const prefixLists =
+        response.data?.["netgate-frr:prefix-lists"]?.list || [];
 
       const networks: NetworkInfo[] = [];
 
       prefixLists.forEach((list: any) => {
         if (list.rules?.rule) {
           list.rules.rule.forEach((rule: any) => {
-            const [ip, prefixLength] = rule.prefix.split('/');
+            const [ip, prefixLength] = rule.prefix.split("/");
             networks.push({
               network: rule.prefix,
               prefixLength: parseInt(prefixLength) || 32,
               interface: list.name,
-              ip: ip
+              ip: ip,
             });
           });
         }
@@ -316,161 +340,164 @@ export class TNSRClient {
       return {
         success: true,
         data: networks,
-        message: `Found ${networks.length} networks from prefix-lists`
+        message: `Found ${networks.length} networks from prefix-lists`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
-  async addPbrRoute(ip: string, nextHop: string, policyName: string, sequence: number): Promise<ApiResponse<{ policyName: string; sequence: number; routeMapCreated: boolean }>> {
+  async addPbrRoute(
+    ip: string,
+    nextHop: string,
+    policyName: string,
+    sequence: number
+  ): Promise<
+    ApiResponse<{
+      policyName: string;
+      sequence: number;
+      routeMapCreated: boolean;
+    }>
+  > {
     try {
+      await this.api.put(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${policyName}`,
+        {
+          "netgate-frr:list": [
+            {
+              name: policyName,
+              rules: {
+                rule: [
+                  {
+                    sequence: sequence,
+                    action: "permit",
+                    prefix: `${ip}/32`,
+                  },
+                ],
+              },
+            },
+          ],
+        }
+      );
 
-      await this.api.put(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${policyName}`, {
-        "netgate-frr:list": [
-          {
-            "name": policyName,
-            "rules": {
-              "rule": [
-                {
-                  "sequence": sequence,
-                  "action": "permit",
-                  "prefix": `${ip}/32`
-                }
-              ]
-            }
-          }
-        ]
-      });
-
-
-      const routeMapResult = await this.createRouteMap(policyName, policyName, nextHop, 10, `PBR route-map for ${ip}`);
+      const routeMapResult = await this.createRouteMap(
+        policyName,
+        policyName,
+        nextHop,
+        10,
+        `PBR route-map for ${ip}`
+      );
 
       return {
         success: true,
         data: {
           policyName,
           sequence,
-          routeMapCreated: routeMapResult.success
+          routeMapCreated: routeMapResult.success,
         },
         message: routeMapResult.success
           ? `PBR route created: ${policyName} (prefix-list + route-map) -> ${ip}/32 -> ${nextHop}`
-          : `PBR prefix-list created: ${policyName}. Route-map creation failed: ${routeMapResult.error}`
+          : `PBR prefix-list created: ${policyName}. Route-map creation failed: ${routeMapResult.error}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
-  async removePbrRoute(policyName: string): Promise<ApiResponse<{ policyName: string; routeMapRemoved: boolean }>> {
+  async removePbrRoute(
+    policyName: string
+  ): Promise<ApiResponse<{ policyName: string; routeMapRemoved: boolean }>> {
     try {
-
       const routeMapResult = await this.removeRouteMap(policyName);
 
-
-      await this.api.delete(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${policyName}`);
+      await this.api.delete(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${policyName}`
+      );
 
       return {
         success: true,
         data: {
           policyName,
-          routeMapRemoved: routeMapResult.success
+          routeMapRemoved: routeMapResult.success,
         },
         message: routeMapResult.success
           ? `PBR route removed: ${policyName} (prefix-list + route-map)`
-          : `PBR prefix-list removed: ${policyName}. Route-map removal failed: ${routeMapResult.error}`
+          : `PBR prefix-list removed: ${policyName}. Route-map removal failed: ${routeMapResult.error}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
   async listPbrRoutes(): Promise<ApiResponse<PbrRouteInfo[]>> {
     try {
-      const response = await this.api.get('/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists');
-      const prefixLists = response.data?.['netgate-frr:prefix-lists']?.list || [];
+      const response = await this.api.get(
+        "/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists"
+      );
+      const prefixLists =
+        response.data?.["netgate-frr:prefix-lists"]?.list || [];
 
       const pbrRoutes: PbrRouteInfo[] = prefixLists.map((list: any) => {
-        const rules: PrefixListRule[] = list.rules?.rule?.map((rule: any) => ({
-          sequence: rule.sequence,
-          action: rule.action,
-          prefix: rule.prefix
-        })) || [];
+        const rules: PrefixListRule[] =
+          list.rules?.rule?.map((rule: any) => ({
+            sequence: rule.sequence,
+            action: rule.action,
+            prefix: rule.prefix,
+          })) || [];
 
         return {
           name: list.name,
           ruleCount: rules.length,
-          rules
+          rules,
         };
       });
 
       return {
         success: true,
         data: pbrRoutes,
-        message: `Found ${pbrRoutes.length} prefix-lists`
+        message: `Found ${pbrRoutes.length} prefix-lists`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
   async addBlackholeRoute(
     ip: string,
-    sequence: number = 4000,
-    prefixListName: string = 'DGN-OUT-666',
-    routeTableName: string = 'default'
-  ): Promise<ApiResponse<{ ip: string; sequence: number; routeTableAdded: boolean; prefixListName: string; routeTableName: string }>> {
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<{ ip: string; routeTableName: string }>> {
     try {
-
-      const ruleData = {
-        "netgate-frr:rule": {
-          "sequence": sequence,
-          "action": "permit",
-          "prefix": `${ip}/32`
-        }
-      };
-
-      await this.api.put(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${prefixListName}/rules/rule=${sequence}`, ruleData);
-
-
-      let routeTableSuccess = false;
       try {
         const staticRouteData = {
           "netgate-route-table:route": {
             "destination-prefix": `${ip}/32`,
             "next-hop": {
-              "hop": [
+              hop: [
                 {
                   "hop-id": 1,
-                  "drop": true
-                }
-              ]
-            }
-          }
+                  drop: true,
+                },
+              ],
+            },
+          },
         };
 
-        await this.api.put(`/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${ip}%2F32`, staticRouteData);
-        routeTableSuccess = true;
+        await this.api.put(
+          `/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${ip}%2F32`,
+          staticRouteData
+        );
       } catch (routeError) {
         console.warn(`Route table add failed for ${ip}: ${routeError}`);
       }
@@ -479,99 +506,42 @@ export class TNSRClient {
         success: true,
         data: {
           ip,
-          sequence,
-          prefixListName,
           routeTableName,
-          routeTableAdded: routeTableSuccess
         },
-        message: routeTableSuccess
-          ? `Blackhole route added: ${ip}/32 (prefix-list: ${prefixListName} + route table: ${routeTableName})`
-          : `Blackhole route added to ${prefixListName}: ${ip}/32 (route table add failed)`
+        message: `Blackhole route added: ${ip}/32 (route table: ${routeTableName})`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
   async removeBlackholeRoute(
     ip: string,
-    sequence: number,
-    prefixListName: string = 'DGN-OUT-666',
-    routeTableName: string = 'default'
-  ): Promise<ApiResponse<{ ip: string; sequence: number; routeTableRemoved: boolean; prefixListName: string; routeTableName: string }>> {
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<{ ip: string; routeTableName: string }>> {
     try {
-
-      let routeTableSuccess = false;
-      try {
-        await this.api.delete(`/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${ip}%2F32`);
-        routeTableSuccess = true;
-      } catch (routeError) {
-        console.warn(`Route table remove failed for ${ip}: ${routeError}`);
-      }
-
-
-      await this.api.delete(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${prefixListName}/rules/rule=${sequence}`);
+      await this.api.delete(
+        `/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${ip}%2F32`
+      );
 
       return {
         success: true,
         data: {
           ip,
-          sequence,
-          prefixListName,
           routeTableName,
-          routeTableRemoved: routeTableSuccess
         },
-        message: routeTableSuccess
-          ? `Blackhole route removed: ${ip}/32 (prefix-list: ${prefixListName} + route table: ${routeTableName})`
-          : `Blackhole route removed from ${prefixListName}: ${ip}/32 (route table remove failed)`
+        message: `Blackhole route removed: ${ip}/32 (route table: ${routeTableName})`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
-
-
-  async listBlackholeRoutes(prefixListName: string = 'DGN-OUT-666'): Promise<ApiResponse<BlackholeRouteInfo[]>> {
-    try {
-      const response = await this.api.get(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${prefixListName}`);
-      const prefixLists = response.data?.['netgate-frr:list'];
-
-      let blackholeRoutes: BlackholeRouteInfo[] = [];
-
-      if (prefixLists && Array.isArray(prefixLists) && prefixLists.length > 0) {
-        const dgnList = prefixLists.find(list => list.name === prefixListName);
-        if (dgnList && dgnList.rules && dgnList.rules.rule) {
-          blackholeRoutes = dgnList.rules.rule.map((rule: any) => ({
-            sequence: rule.sequence,
-            prefix: rule.prefix,
-            action: rule.action
-          }));
-        }
-      }
-
-      return {
-        success: true,
-        data: blackholeRoutes,
-        message: `Found ${blackholeRoutes.length} blackhole routes in ${prefixListName}`
-      };
-
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data || error.message
-      };
-    }
-  }
-
 
   async createRouteMap(
     routeMapName: string,
@@ -581,114 +551,188 @@ export class TNSRClient {
     description?: string
   ): Promise<ApiResponse<{ routeMapName: string; sequence: number }>> {
     try {
-      await this.api.put(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps/map=${routeMapName}`, {
-        "netgate-frr:map": [
-          {
-            "name": routeMapName,
-            "description": description || `Route map for ${prefixListName}`,
-            "rules": {
-              "rule": [
-                {
-                  "sequence": sequence,
-                  "policy": "permit",
-                  "match": {
-                    "ip-address-prefix-list": prefixListName
+      await this.api.put(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps/map=${routeMapName}`,
+        {
+          "netgate-frr:map": [
+            {
+              name: routeMapName,
+              description: description || `Route map for ${prefixListName}`,
+              rules: {
+                rule: [
+                  {
+                    sequence: sequence,
+                    policy: "permit",
+                    match: {
+                      "ip-address-prefix-list": prefixListName,
+                    },
+                    set: {
+                      "src-ip-address": nextHop,
+                    },
                   },
-                  "set": {
-                    "src-ip-address": nextHop
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      });
+                ],
+              },
+            },
+          ],
+        }
+      );
 
       return {
         success: true,
         data: {
           routeMapName,
-          sequence
+          sequence,
         },
-        message: `Route-map created: ${routeMapName} -> prefix-list: ${prefixListName} -> next-hop: ${nextHop}`
+        message: `Route-map created: ${routeMapName} -> prefix-list: ${prefixListName} -> next-hop: ${nextHop}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
-  async removeRouteMap(routeMapName: string): Promise<ApiResponse<{ routeMapName: string }>> {
+  async removeRouteMap(
+    routeMapName: string
+  ): Promise<ApiResponse<{ routeMapName: string }>> {
     try {
-      await this.api.delete(`/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps/map=${routeMapName}`);
+      await this.api.delete(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps/map=${routeMapName}`
+      );
 
       return {
         success: true,
         data: { routeMapName },
-        message: `Route-map removed: ${routeMapName}`
+        message: `Route-map removed: ${routeMapName}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
+  async listBlackholeRoutes(
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<RouteTableInfo["routes"]>> {
+    try {
+      const response = await this.listRouteTable(routeTableName);
+      if (!response.success || !response.data) {
+        return {
+          success: false,
+          error: response.error || "Failed to retrieve route table data",
+        };
+      }
+
+      const data = response.data.routes.filter((route) => route.hasDrop);
+
+      return {
+        success: true,
+        data,
+        message: `Found ${data.length} blackhole routes in ${routeTableName}`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async listRouteTable(
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<RouteTableInfo>> {
+    try {
+      const response = await this.api.get(
+        `/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}`
+      );
+
+      const data = response.data?.["netgate-route-table:route-table"] || [];
+      const routes = data.flatMap(
+        (table: any) => table["ipv4-routes"]?.route || []
+      );
+      const routeMap = new Map<string, any[]>();
+      for (const route of routes) {
+        routeMap.set(route["destination-prefix"], route["next-hop"]?.hop || []);
+      }
+      const routeMapArray = Array.from(routeMap.entries()).map(
+        ([prefix, hops]) => ({
+          destinationPrefix: prefix,
+          hasDrop: hops.some((hop) => hop.drop),
+          firstHop: hops.length > 0 ? hops[0]?.["ipv4-address"] : null,
+          hops,
+        })
+      );
+
+      const routeMapData = {
+        routeTableName,
+        totalRoutes: routeMapArray.length,
+        routes: routeMapArray,
+      };
+
+      return {
+        success: true,
+        data: routeMapData,
+        message: "Route table data retrieved",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
 
   async listRouteMaps(): Promise<ApiResponse<RouteMapInfo[]>> {
     try {
-      const response = await this.api.get('/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps');
-      const routeMaps = response.data?.['netgate-frr:route-maps']?.map || [];
+      const response = await this.api.get(
+        "/restconf/data/netgate-route:route-config/dynamic/netgate-frr:route-maps"
+      );
+      const routeMaps = response.data?.["netgate-frr:route-maps"]?.map || [];
 
       const routeMapList: RouteMapInfo[] = routeMaps.map((map: any) => {
-        const rules: RouteMapRule[] = map.rules?.rule?.map((rule: any) => ({
-          sequence: rule.sequence,
-          policy: rule.policy,
-          match: rule.match,
-          set: rule.set
-        })) || [];
+        const rules: RouteMapRule[] =
+          map.rules?.rule?.map((rule: any) => ({
+            sequence: rule.sequence,
+            policy: rule.policy,
+            match: rule.match,
+            set: rule.set,
+          })) || [];
 
         return {
           name: map.name,
           description: map.description,
-          rules
+          rules,
         };
       });
 
       return {
         success: true,
         data: routeMapList,
-        message: `Found ${routeMapList.length} route-map(s)`
+        message: `Found ${routeMapList.length} route-map(s)`,
       };
-
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
       };
     }
   }
 
-
   async getTrafficStatistics(): Promise<ApiResponse<InterfaceTrafficStats[]>> {
     try {
-
       const endpoints = [
-        '/restconf/data/netgate-interface:interfaces-state',
-        '/restconf/data/netgate-interface:interfaces',
-        '/restconf/data/ietf-interfaces:interfaces-state',
-        '/restconf/data/interfaces-state',
-        '/restconf/data/interfaces'
+        "/restconf/data/netgate-interface:interfaces-state",
+        "/restconf/data/netgate-interface:interfaces",
+        "/restconf/data/ietf-interfaces:interfaces-state",
+        "/restconf/data/interfaces-state",
+        "/restconf/data/interfaces",
       ];
 
       let response: any = null;
-      let usedEndpoint = '';
+      let usedEndpoint = "";
 
       for (const endpoint of endpoints) {
         try {
@@ -701,42 +745,50 @@ export class TNSRClient {
       }
 
       if (!response) {
-
         return {
           success: false,
-          error: 'No working interface statistics endpoint found',
-          message: 'Try CLI: show interface statistics, show hardware-interfaces, or show interface'
+          error: "No working interface statistics endpoint found",
+          message:
+            "Try CLI: show interface statistics, show hardware-interfaces, or show interface",
         };
       }
 
-
-      const interfaceData = this.parseInterfaceData(response.data, usedEndpoint);
+      const interfaceData = this.parseInterfaceData(
+        response.data,
+        usedEndpoint
+      );
 
       if (interfaceData.length === 0) {
         return {
           success: false,
-          error: 'No interface data found in response',
-          message: 'Interface data structure may be different than expected'
+          error: "No interface data found in response",
+          message: "Interface data structure may be different than expected",
         };
       }
 
-
-      const totalStats = interfaceData.reduce((total, iface) => {
-        total.totalRxPackets += iface.statistics.rxPackets.total;
-        total.totalTxPackets += iface.statistics.txPackets.total;
-        total.totalRxBytes += iface.statistics.bytes.rxBytes;
-        total.totalTxBytes += iface.statistics.bytes.txBytes;
-        total.totalErrors += iface.statistics.rxPackets.errors + iface.statistics.txPackets.errors;
-        total.totalDiscards += iface.statistics.rxPackets.discards + iface.statistics.txPackets.discards;
-        return total;
-      }, {
-        totalRxPackets: 0,
-        totalTxPackets: 0,
-        totalRxBytes: 0,
-        totalTxBytes: 0,
-        totalErrors: 0,
-        totalDiscards: 0
-      });
+      const totalStats = interfaceData.reduce(
+        (total, iface) => {
+          total.totalRxPackets += iface.statistics.rxPackets.total;
+          total.totalTxPackets += iface.statistics.txPackets.total;
+          total.totalRxBytes += iface.statistics.bytes.rxBytes;
+          total.totalTxBytes += iface.statistics.bytes.txBytes;
+          total.totalErrors +=
+            iface.statistics.rxPackets.errors +
+            iface.statistics.txPackets.errors;
+          total.totalDiscards +=
+            iface.statistics.rxPackets.discards +
+            iface.statistics.txPackets.discards;
+          return total;
+        },
+        {
+          totalRxPackets: 0,
+          totalTxPackets: 0,
+          totalRxBytes: 0,
+          totalTxBytes: 0,
+          totalErrors: 0,
+          totalDiscards: 0,
+        }
+      );
 
       return {
         success: true,
@@ -744,35 +796,38 @@ export class TNSRClient {
         message: `Traffic statistics retrieved for ${interfaceData.length} interfaces using ${usedEndpoint}`,
         metadata: {
           totalInterfaces: interfaceData.length,
-          activeInterfaces: interfaceData.filter(iface => iface.operStatus === 'up').length,
+          activeInterfaces: interfaceData.filter(
+            (iface) => iface.operStatus === "up"
+          ).length,
           totalTraffic: totalStats,
           timestamp: new Date().toISOString(),
-          endpoint: usedEndpoint
-        }
+          endpoint: usedEndpoint,
+        },
       };
-
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data || error.message,
-        message: 'Failed to retrieve traffic statistics. Try CLI: show interface statistics'
+        message:
+          "Failed to retrieve traffic statistics. Try CLI: show interface statistics",
       };
     }
   }
 
-
-  private parseInterfaceData(data: any, endpoint: string): InterfaceTrafficStats[] {
+  private parseInterfaceData(
+    data: any,
+    endpoint: string
+  ): InterfaceTrafficStats[] {
     let interfaces: any[] = [];
 
-
-    if (data['netgate-interface:interfaces-state']?.interface) {
-      interfaces = data['netgate-interface:interfaces-state'].interface;
-    } else if (data['netgate-interface:interfaces']?.interface) {
-      interfaces = data['netgate-interface:interfaces'].interface;
-    } else if (data['ietf-interfaces:interfaces-state']?.interface) {
-      interfaces = data['ietf-interfaces:interfaces-state'].interface;
-    } else if (data['interfaces-state']?.interface) {
-      interfaces = data['interfaces-state'].interface;
+    if (data["netgate-interface:interfaces-state"]?.interface) {
+      interfaces = data["netgate-interface:interfaces-state"].interface;
+    } else if (data["netgate-interface:interfaces"]?.interface) {
+      interfaces = data["netgate-interface:interfaces"].interface;
+    } else if (data["ietf-interfaces:interfaces-state"]?.interface) {
+      interfaces = data["ietf-interfaces:interfaces-state"].interface;
+    } else if (data["interfaces-state"]?.interface) {
+      interfaces = data["interfaces-state"].interface;
     } else if (data.interface) {
       interfaces = data.interface;
     } else if (Array.isArray(data)) {
@@ -783,62 +838,102 @@ export class TNSRClient {
       const stats = iface.statistics || iface.stats || {};
 
       return {
-        interfaceName: iface.name || iface.ifName || 'unknown',
-        adminStatus: iface['admin-status'] || iface.adminStatus || 'unknown',
-        operStatus: iface['oper-status'] || iface.operStatus || iface.status || 'unknown',
-        type: iface.type || iface.ifType || 'unknown',
-        lastChange: iface['last-change'] || iface.lastChange,
+        interfaceName: iface.name || iface.ifName || "unknown",
+        adminStatus: iface["admin-status"] || iface.adminStatus || "unknown",
+        operStatus:
+          iface["oper-status"] || iface.operStatus || iface.status || "unknown",
+        type: iface.type || iface.ifType || "unknown",
+        lastChange: iface["last-change"] || iface.lastChange,
         statistics: {
           rxPackets: {
-            unicast: stats['in-unicast-pkts'] || stats.inUnicastPkts || stats.rxUnicast || 0,
-            multicast: stats['in-multicast-pkts'] || stats.inMulticastPkts || stats.rxMulticast || 0,
-            broadcast: stats['in-broadcast-pkts'] || stats.inBroadcastPkts || stats.rxBroadcast || 0,
-            total: stats['in-pkts'] || stats.inPkts || stats.rxPackets ||
-              ((stats['in-unicast-pkts'] || 0) + (stats['in-multicast-pkts'] || 0) + (stats['in-broadcast-pkts'] || 0)),
-            errors: stats['in-errors'] || stats.inErrors || stats.rxErrors || 0,
-            discards: stats['in-discards'] || stats.inDiscards || stats.rxDrops || 0
+            unicast:
+              stats["in-unicast-pkts"] ||
+              stats.inUnicastPkts ||
+              stats.rxUnicast ||
+              0,
+            multicast:
+              stats["in-multicast-pkts"] ||
+              stats.inMulticastPkts ||
+              stats.rxMulticast ||
+              0,
+            broadcast:
+              stats["in-broadcast-pkts"] ||
+              stats.inBroadcastPkts ||
+              stats.rxBroadcast ||
+              0,
+            total:
+              stats["in-pkts"] ||
+              stats.inPkts ||
+              stats.rxPackets ||
+              (stats["in-unicast-pkts"] || 0) +
+              (stats["in-multicast-pkts"] || 0) +
+              (stats["in-broadcast-pkts"] || 0),
+            errors: stats["in-errors"] || stats.inErrors || stats.rxErrors || 0,
+            discards:
+              stats["in-discards"] || stats.inDiscards || stats.rxDrops || 0,
           },
           txPackets: {
-            unicast: stats['out-unicast-pkts'] || stats.outUnicastPkts || stats.txUnicast || 0,
-            multicast: stats['out-multicast-pkts'] || stats.outMulticastPkts || stats.txMulticast || 0,
-            broadcast: stats['out-broadcast-pkts'] || stats.outBroadcastPkts || stats.txBroadcast || 0,
-            total: stats['out-pkts'] || stats.outPkts || stats.txPackets ||
-              ((stats['out-unicast-pkts'] || 0) + (stats['out-multicast-pkts'] || 0) + (stats['out-broadcast-pkts'] || 0)),
-            errors: stats['out-errors'] || stats.outErrors || stats.txErrors || 0,
-            discards: stats['out-discards'] || stats.outDiscards || stats.txDrops || 0
+            unicast:
+              stats["out-unicast-pkts"] ||
+              stats.outUnicastPkts ||
+              stats.txUnicast ||
+              0,
+            multicast:
+              stats["out-multicast-pkts"] ||
+              stats.outMulticastPkts ||
+              stats.txMulticast ||
+              0,
+            broadcast:
+              stats["out-broadcast-pkts"] ||
+              stats.outBroadcastPkts ||
+              stats.txBroadcast ||
+              0,
+            total:
+              stats["out-pkts"] ||
+              stats.outPkts ||
+              stats.txPackets ||
+              (stats["out-unicast-pkts"] || 0) +
+              (stats["out-multicast-pkts"] || 0) +
+              (stats["out-broadcast-pkts"] || 0),
+            errors:
+              stats["out-errors"] || stats.outErrors || stats.txErrors || 0,
+            discards:
+              stats["out-discards"] || stats.outDiscards || stats.txDrops || 0,
           },
           bytes: {
-            rxBytes: stats['in-octets'] || stats.inOctets || stats.rxBytes || 0,
-            txBytes: stats['out-octets'] || stats.outOctets || stats.txBytes || 0,
-            totalBytes: (stats['in-octets'] || stats.inOctets || stats.rxBytes || 0) +
-              (stats['out-octets'] || stats.outOctets || stats.txBytes || 0)
+            rxBytes: stats["in-octets"] || stats.inOctets || stats.rxBytes || 0,
+            txBytes:
+              stats["out-octets"] || stats.outOctets || stats.txBytes || 0,
+            totalBytes:
+              (stats["in-octets"] || stats.inOctets || stats.rxBytes || 0) +
+              (stats["out-octets"] || stats.outOctets || stats.txBytes || 0),
           },
           rates: {
-            rxBytesPerSec: stats['in-speed'] || stats.inSpeed || 0,
-            txBytesPerSec: stats['out-speed'] || stats.outSpeed || 0,
+            rxBytesPerSec: stats["in-speed"] || stats.inSpeed || 0,
+            txBytesPerSec: stats["out-speed"] || stats.outSpeed || 0,
             rxPacketsPerSec: 0,
-            txPacketsPerSec: 0
-          }
+            txPacketsPerSec: 0,
+          },
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     });
   }
 
-
-  async getInterfaceTrafficStats(interfaceName: string): Promise<ApiResponse<InterfaceTrafficStats>> {
+  async getInterfaceTrafficStats(
+    interfaceName: string
+  ): Promise<ApiResponse<InterfaceTrafficStats>> {
     try {
-
       const endpoints = [
         `/restconf/data/netgate-interface:interfaces-state/interface=${interfaceName}`,
         `/restconf/data/netgate-interface:interfaces/interface=${interfaceName}`,
         `/restconf/data/ietf-interfaces:interfaces-state/interface=${interfaceName}`,
         `/restconf/data/interfaces-state/interface=${interfaceName}`,
-        `/restconf/data/interfaces/interface=${interfaceName}`
+        `/restconf/data/interfaces/interface=${interfaceName}`,
       ];
 
       let response: any = null;
-      let usedEndpoint = '';
+      let usedEndpoint = "";
 
       for (const endpoint of endpoints) {
         try {
@@ -853,16 +948,15 @@ export class TNSRClient {
       if (!response) {
         return {
           success: false,
-          error: `Interface ${interfaceName} not found in any endpoint`
+          error: `Interface ${interfaceName} not found in any endpoint`,
         };
       }
 
-
       let iface: any = null;
-      if (response.data?.['netgate-interface:interface']) {
-        iface = response.data['netgate-interface:interface'];
-      } else if (response.data?.['ietf-interfaces:interface']) {
-        iface = response.data['ietf-interfaces:interface'];
+      if (response.data?.["netgate-interface:interface"]) {
+        iface = response.data["netgate-interface:interface"];
+      } else if (response.data?.["ietf-interfaces:interface"]) {
+        iface = response.data["ietf-interfaces:interface"];
       } else if (response.data?.interface) {
         iface = response.data.interface;
       } else {
@@ -872,7 +966,7 @@ export class TNSRClient {
       if (!iface) {
         return {
           success: false,
-          error: `Interface ${interfaceName} data not found in response`
+          error: `Interface ${interfaceName} data not found in response`,
         };
       }
 
@@ -880,58 +974,96 @@ export class TNSRClient {
 
       const trafficStats: InterfaceTrafficStats = {
         interfaceName: iface.name || interfaceName,
-        adminStatus: iface['admin-status'] || iface.adminStatus || 'unknown',
-        operStatus: iface['oper-status'] || iface.operStatus || iface.status || 'unknown',
-        type: iface.type || iface.ifType || 'unknown',
-        lastChange: iface['last-change'] || iface.lastChange,
+        adminStatus: iface["admin-status"] || iface.adminStatus || "unknown",
+        operStatus:
+          iface["oper-status"] || iface.operStatus || iface.status || "unknown",
+        type: iface.type || iface.ifType || "unknown",
+        lastChange: iface["last-change"] || iface.lastChange,
         statistics: {
           rxPackets: {
-            unicast: stats['in-unicast-pkts'] || stats.inUnicastPkts || stats.rxUnicast || 0,
-            multicast: stats['in-multicast-pkts'] || stats.inMulticastPkts || stats.rxMulticast || 0,
-            broadcast: stats['in-broadcast-pkts'] || stats.inBroadcastPkts || stats.rxBroadcast || 0,
-            total: stats['in-pkts'] || stats.inPkts || stats.rxPackets ||
-              ((stats['in-unicast-pkts'] || 0) + (stats['in-multicast-pkts'] || 0) + (stats['in-broadcast-pkts'] || 0)),
-            errors: stats['in-errors'] || stats.inErrors || stats.rxErrors || 0,
-            discards: stats['in-discards'] || stats.inDiscards || stats.rxDrops || 0
+            unicast:
+              stats["in-unicast-pkts"] ||
+              stats.inUnicastPkts ||
+              stats.rxUnicast ||
+              0,
+            multicast:
+              stats["in-multicast-pkts"] ||
+              stats.inMulticastPkts ||
+              stats.rxMulticast ||
+              0,
+            broadcast:
+              stats["in-broadcast-pkts"] ||
+              stats.inBroadcastPkts ||
+              stats.rxBroadcast ||
+              0,
+            total:
+              stats["in-pkts"] ||
+              stats.inPkts ||
+              stats.rxPackets ||
+              (stats["in-unicast-pkts"] || 0) +
+              (stats["in-multicast-pkts"] || 0) +
+              (stats["in-broadcast-pkts"] || 0),
+            errors: stats["in-errors"] || stats.inErrors || stats.rxErrors || 0,
+            discards:
+              stats["in-discards"] || stats.inDiscards || stats.rxDrops || 0,
           },
           txPackets: {
-            unicast: stats['out-unicast-pkts'] || stats.outUnicastPkts || stats.txUnicast || 0,
-            multicast: stats['out-multicast-pkts'] || stats.outMulticastPkts || stats.txMulticast || 0,
-            broadcast: stats['out-broadcast-pkts'] || stats.outBroadcastPkts || stats.txBroadcast || 0,
-            total: stats['out-pkts'] || stats.outPkts || stats.txPackets ||
-              ((stats['out-unicast-pkts'] || 0) + (stats['out-multicast-pkts'] || 0) + (stats['out-broadcast-pkts'] || 0)),
-            errors: stats['out-errors'] || stats.outErrors || stats.txErrors || 0,
-            discards: stats['out-discards'] || stats.outDiscards || stats.txDrops || 0
+            unicast:
+              stats["out-unicast-pkts"] ||
+              stats.outUnicastPkts ||
+              stats.txUnicast ||
+              0,
+            multicast:
+              stats["out-multicast-pkts"] ||
+              stats.outMulticastPkts ||
+              stats.txMulticast ||
+              0,
+            broadcast:
+              stats["out-broadcast-pkts"] ||
+              stats.outBroadcastPkts ||
+              stats.txBroadcast ||
+              0,
+            total:
+              stats["out-pkts"] ||
+              stats.outPkts ||
+              stats.txPackets ||
+              (stats["out-unicast-pkts"] || 0) +
+              (stats["out-multicast-pkts"] || 0) +
+              (stats["out-broadcast-pkts"] || 0),
+            errors:
+              stats["out-errors"] || stats.outErrors || stats.txErrors || 0,
+            discards:
+              stats["out-discards"] || stats.outDiscards || stats.txDrops || 0,
           },
           bytes: {
-            rxBytes: stats['in-octets'] || stats.inOctets || stats.rxBytes || 0,
-            txBytes: stats['out-octets'] || stats.outOctets || stats.txBytes || 0,
-            totalBytes: (stats['in-octets'] || stats.inOctets || stats.rxBytes || 0) +
-              (stats['out-octets'] || stats.outOctets || stats.txBytes || 0)
+            rxBytes: stats["in-octets"] || stats.inOctets || stats.rxBytes || 0,
+            txBytes:
+              stats["out-octets"] || stats.outOctets || stats.txBytes || 0,
+            totalBytes:
+              (stats["in-octets"] || stats.inOctets || stats.rxBytes || 0) +
+              (stats["out-octets"] || stats.outOctets || stats.txBytes || 0),
           },
           rates: {
-            rxBytesPerSec: stats['in-speed'] || stats.inSpeed || 0,
-            txBytesPerSec: stats['out-speed'] || stats.outSpeed || 0,
+            rxBytesPerSec: stats["in-speed"] || stats.inSpeed || 0,
+            txBytesPerSec: stats["out-speed"] || stats.outSpeed || 0,
             rxPacketsPerSec: 0,
-            txPacketsPerSec: 0
-          }
+            txPacketsPerSec: 0,
+          },
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       return {
         success: true,
         data: trafficStats,
-        message: `Traffic statistics for interface ${interfaceName} using ${usedEndpoint}`
+        message: `Traffic statistics for interface ${interfaceName} using ${usedEndpoint}`,
       };
-
     } catch (error: any) {
       return {
         success: false,
         error: error.response?.data || error.message,
-        message: `Failed to retrieve traffic statistics for ${interfaceName}`
+        message: `Failed to retrieve traffic statistics for ${interfaceName}`,
       };
     }
   }
-
 }

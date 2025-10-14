@@ -25,7 +25,6 @@ function printJson(title: string, response: any) {
 
   const blackholeIp = '192.168.100.52';
   const blackholeSequence = 4004;
-  const blackholePrefixList = 'CUSTOM-BLACKHOLE-LIST';
   const blackholeRouteTable = 'default';
 
   try {
@@ -62,23 +61,23 @@ function printJson(title: string, response: any) {
     printJson('REMOVE PBR ROUTE', removePbrResult);
 
     // 5. BLACKHOLE ROUTE LIST
-    const blackholeRoutes = await client.listBlackholeRoutes(blackholePrefixList);
+    const blackholeRoutes = await client.listBlackholeRoutes(blackholeRouteTable);
     printJson('BLACKHOLE ROUTES (CURRENT)', blackholeRoutes);
 
     // 6. ADD BLACKHOLE ROUTE
-    const addBlackholeResult = await client.addBlackholeRoute(blackholeIp, blackholeSequence, blackholePrefixList, blackholeRouteTable);
+    const addBlackholeResult = await client.addBlackholeRoute(blackholeIp, blackholeRouteTable);
     printJson('ADD BLACKHOLE ROUTE', addBlackholeResult);
 
     // 7. BLACKHOLE ROUTE LIST (UPDATED)
-    const updatedBlackholeRoutes = await client.listBlackholeRoutes(blackholePrefixList);
+    const updatedBlackholeRoutes = await client.listBlackholeRoutes(blackholeRouteTable);
     printJson('BLACKHOLE ROUTES (UPDATED)', updatedBlackholeRoutes);
 
     // 8. REMOVE BLACKHOLE ROUTE
-    const removeBlackholeResult = await client.removeBlackholeRoute(blackholeIp, blackholeSequence, blackholePrefixList, blackholeRouteTable);
+    const removeBlackholeResult = await client.removeBlackholeRoute(blackholeIp, blackholeRouteTable);
     printJson('REMOVE BLACKHOLE ROUTE', removeBlackholeResult);
 
     // 9. BLACKHOLE ROUTE LIST (FINAL)
-    const finalBlackholeRoutes = await client.listBlackholeRoutes(blackholePrefixList);
+    const finalBlackholeRoutes = await client.listBlackholeRoutes(blackholeRouteTable);
     printJson('BLACKHOLE ROUTES (FINAL)', finalBlackholeRoutes);
 
     // 10. ALL INTERFACE TRAFFIC STATISTICS

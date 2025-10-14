@@ -100,18 +100,14 @@ Adds a new blackhole route to drop traffic to specified IP.
 
 **Parameters:**
 - `ip: string` - IP address to blackhole
-- `sequence: number` - Sequence number (default: 4000)
-- `prefixListName: string` - Prefix list name (default: 'DGN-OUT-666')
 - `routeTableName: string` - Route table name (default: 'default')
 
-**Returns:** `ApiResponse<{ ip: string; sequence: number; routeTableAdded: boolean; prefixListName: string; routeTableName: string }>`
+**Returns:** `ApiResponse<{ ip: string; routeTableName: string }>`
 
 **Example:**
 ```typescript
 const addBlackhole = await tnsrClient.addBlackholeRoute(
   '192.168.100.50',     // IP address
-  4002,                 // Sequence
-  'BLACKHOLE-LIST',     // Prefix list name
   'default'             // Route table
 );
 ```
@@ -121,11 +117,9 @@ Removes a blackhole route.
 
 **Parameters:**
 - `ip: string` - IP address to remove from blackhole
-- `sequence: number` - Sequence number
-- `prefixListName: string` - Prefix list name (default: 'DGN-OUT-666')
 - `routeTableName: string` - Route table name (default: 'default')
 
-**Returns:** `ApiResponse<{ ip: string; sequence: number; routeTableRemoved: boolean; prefixListName: string; routeTableName: string }>`
+**Returns:** `ApiResponse<{ ip: string; routeTableName: string }>`
 
 ### `listBlackholeRoutes(prefixListName)`
 Returns a list of blackhole routes in the specified prefix list.

@@ -18,13 +18,6 @@
     "noUncheckedIndexedAccess": true,
     "moduleResolution": "Node16"
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "test",
-    "examples"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "examples"]
 }

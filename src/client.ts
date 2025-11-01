@@ -474,6 +474,78 @@ export class TNSRClient {
     }
   }
 
+
+  async addRoute(
+    route: string,
+    nextHop: string,
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<{ route: string; nextHop: string; routeTableName: string }>> {
+    try {
+      const staticRouteData = {
+        "netgate-route-table:route": {
+          "destination-prefix": route,
+          "next-hop": {
+            hop: [
+              {
+                "hop-id": 1,
+                "ipv4-address": nextHop,
+              },
+            ],
+          },
+        },
+      };
+
+      await this.api.put(
+        `/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${encodeURIComponent(
+          route
+        )}`,
+        staticRouteData
+      );
+
+      return {
+        success: true,
+        data: {
+          route,
+          nextHop,
+          routeTableName,
+        },
+        message: `Route added: ${route} -> ${nextHop} (route table: ${routeTableName})`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async removeRoute(
+    route: string,
+    routeTableName: string = "default"
+  ): Promise<ApiResponse<{ route: string; routeTableName: string }>> {
+    try {
+      await this.api.delete(
+        `/restconf/data/netgate-route-table:route-table-config/static-routes/route-table=${routeTableName}/ipv4-routes/route=${encodeURIComponent(
+          route
+        )}`
+      );
+
+      return {
+        success: true,
+        data: {
+          route,
+          routeTableName,
+        },
+        message: `Route removed: ${route} (route table: ${routeTableName})`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
   async addBlackholeRoute(
     ip: string,
     routeTableName: string = "default"

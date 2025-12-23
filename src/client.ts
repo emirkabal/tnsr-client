@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios";
+import https from "https"
 
 export interface NetworkInfo {
   network: string;
@@ -27,8 +28,45 @@ export interface InterfaceInfo {
 
 export interface PrefixListRule {
   sequence: number;
-  action: string;
+  action: "permit" | "deny";
   prefix: string;
+  leLen?: number;
+  geLen?: number;
+}
+
+export interface AclRule {
+  sequence: number;
+  action: "permit" | "deny" | "reflect";
+  description?: string;
+  ipVersion?: "ipv4" | "ipv6";
+  protocol?: string;
+  srcIpPrefix?: string;
+  dstIpPrefix?: string;
+  srcFirstPort?: number;
+  srcLastPort?: number;
+  dstFirstPort?: number;
+  dstLastPort?: number;
+  tcpFlagsMask?: number;
+  tcpFlagsValue?: number;
+  icmpFirstType?: number;
+  icmpLastType?: number;
+  icmpFirstCode?: number;
+  icmpLastCode?: number;
+}
+
+export interface AclList {
+  name: string;
+  rules: AclRule[];
+}
+
+export interface BgpShowInput {
+  request: "config" | "neighbors" | "network" | "nexthop" | "peer-group" | "summary";
+  param?: "advertised-routes" | "dampened-routes" | "detail" | "flap-statistics" | "graceful-restart" | "prefix-filter" | "received" | "received-routes" | "routes";
+  peer?: string;
+  family?: "ipv4" | "ipv6";
+  net?: string;
+  param2?: "prefix-filter";
+  vrfId?: string;
 }
 
 export interface PrefixListInfo {
@@ -126,6 +164,9 @@ export class TNSRClient {
     this.baseUrl = baseUrl;
     this.api = axios.create({
       baseURL: baseUrl,
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false,
+      }),
       auth: {
         username,
         password,
@@ -748,6 +789,355 @@ export class TNSRClient {
         success: true,
         data: routeMapData,
         message: "Route table data retrieved",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+
+  async getPrefixLists(): Promise<ApiResponse<PrefixListInfo[]>> {
+    try {
+      const response = await this.api.get(
+        "/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists"
+      );
+
+      const rawLists = response.data?.["netgate-frr:prefix-lists"]?.list || [];
+
+      const prefixLists: PrefixListInfo[] = rawLists.map((list: any) => ({
+        name: list.name,
+        rules: list.rules?.rule?.map((rule: any) => ({
+          sequence: rule.sequence,
+          action: rule.action,
+          prefix: rule.prefix,
+          leLen: rule["netgate-frr:le-len"] || rule["netgate-route:le-len"] || rule.leLen,
+          geLen: rule["netgate-frr:ge-len"] || rule["netgate-route:ge-len"] || rule.geLen,
+        })) || []
+      }));
+
+      return {
+        success: true,
+        data: prefixLists,
+        message: `Found ${prefixLists.length} prefix lists`,
+      };
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return {
+          success: true,
+          data: [],
+          message: "No prefix lists found (404)",
+        };
+      }
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async getPrefixList(name: string): Promise<ApiResponse<PrefixListInfo>> {
+    try {
+      const response = await this.api.get(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${name}`
+      );
+
+      const listData = response.data?.["netgate-frr:list"]?.[0];
+
+      if (!listData) {
+        return {
+          success: false,
+          error: "Prefix list not found in response",
+        };
+      }
+
+      const prefixList: PrefixListInfo = {
+        name: listData.name,
+        rules: listData.rules?.rule?.map((rule: any) => ({
+          sequence: rule.sequence,
+          action: rule.action,
+          prefix: rule.prefix,
+          leLen: rule["netgate-frr:le-len"] || rule["netgate-route:le-len"] || rule.leLen,
+          geLen: rule["netgate-frr:ge-len"] || rule["netgate-route:ge-len"] || rule.geLen,
+        })) || []
+      };
+
+      return {
+        success: true,
+        data: prefixList,
+        message: `Prefix list ${name} retrieved`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async createPrefixList(
+    name: string,
+    rules: PrefixListRule[]
+  ): Promise<ApiResponse<PrefixListInfo>> {
+    try {
+      // Sort rules by sequence to ensure correct order if needed, or just pass as is.
+      const ruleData = rules.map((r) => {
+        const rObj: any = {
+          sequence: r.sequence,
+          action: r.action,
+          prefix: r.prefix,
+        };
+        if (r.leLen !== undefined) rObj["netgate-frr:le-len"] = r.leLen;
+        if (r.geLen !== undefined) rObj["netgate-frr:ge-len"] = r.geLen;
+        return rObj;
+      });
+
+      const payload = {
+        "netgate-frr:list": [
+          {
+            name: name,
+            rules: {
+              rule: ruleData,
+            },
+          },
+        ],
+      };
+
+      await this.api.put(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${name}`,
+        payload
+      );
+
+      return {
+        success: true,
+        data: { name, rules },
+        message: `Prefix list ${name} created/updated with ${rules.length} rules`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async deletePrefixList(name: string): Promise<ApiResponse<{ name: string }>> {
+    try {
+      await this.api.delete(
+        `/restconf/data/netgate-route:route-config/dynamic/netgate-frr:prefix-lists/list=${name}`
+      );
+
+      return {
+        success: true,
+        data: { name },
+        message: `Prefix list ${name} deleted`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async getAclLists(): Promise<ApiResponse<AclList[]>> {
+    try {
+      const response = await this.api.get(
+        "/restconf/data/netgate-acl:acl-config/acl-table"
+      );
+
+      const rawLists = response.data?.["netgate-acl:acl-table"]?.["acl-list"] || [];
+
+      const aclLists: AclList[] = rawLists.map((list: any) => ({
+        name: list["acl-name"],
+        rules: list["acl-rules"]?.["acl-rule"]?.map((rule: any) => this.mapAclRuleFromApi(rule)) || []
+      }));
+
+      return {
+        success: true,
+        data: aclLists,
+        message: `Found ${aclLists.length} ACL lists`,
+      };
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return {
+          success: true,
+          data: [],
+          message: "No ACL lists found (404)",
+        };
+      }
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async getAclList(name: string): Promise<ApiResponse<AclList>> {
+    try {
+      const response = await this.api.get(
+        `/restconf/data/netgate-acl:acl-config/acl-table/acl-list=${name}`
+      );
+
+      const listData = response.data?.["netgate-acl:acl-list"]?.[0]; // Accessing the first item as restconf might return list  
+      const actualData = listData || response.data?.["netgate-acl:acl-list"];
+
+      if (!actualData) {
+        return {
+          success: false,
+          error: "ACL list not found in response",
+        };
+      }
+
+      const aclList: AclList = {
+        name: actualData["acl-name"],
+        rules: actualData["acl-rules"]?.["acl-rule"]?.map((rule: any) => this.mapAclRuleFromApi(rule)) || []
+      };
+
+      return {
+        success: true,
+        data: aclList,
+        message: `ACL list ${name} retrieved`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async createAclList(
+    name: string,
+    rules: AclRule[]
+  ): Promise<ApiResponse<AclList>> {
+    try {
+      const ruleData = rules.map(r => this.mapAclRuleToApi(r));
+
+      const payload = {
+        "netgate-acl:acl-list": [
+          {
+            "acl-name": name,
+            "acl-rules": {
+              "acl-rule": ruleData
+            }
+          }
+        ]
+      };
+
+      await this.api.put(
+        `/restconf/data/netgate-acl:acl-config/acl-table/acl-list=${name}`,
+        payload
+      );
+
+      return {
+        success: true,
+        data: { name, rules },
+        message: `ACL list ${name} created/updated with ${rules.length} rules`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  async deleteAclList(name: string): Promise<ApiResponse<{ name: string }>> {
+    try {
+      await this.api.delete(
+        `/restconf/data/netgate-acl:acl-config/acl-table/acl-list=${name}`
+      );
+
+      return {
+        success: true,
+        data: { name },
+        message: `ACL list ${name} deleted`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+      };
+    }
+  }
+
+  private mapAclRuleFromApi(rule: any): AclRule {
+    return {
+      sequence: rule["sequence"],
+      action: rule["action"],
+      description: rule["acl-rule-description"],
+      ipVersion: rule["ip-version"],
+      protocol: rule["protocol"],
+      srcIpPrefix: rule["src-ip-prefix"],
+      dstIpPrefix: rule["dst-ip-prefix"],
+      srcFirstPort: rule["src-first-port"],
+      srcLastPort: rule["src-last-port"],
+      dstFirstPort: rule["dst-first-port"],
+      dstLastPort: rule["dst-last-port"],
+      tcpFlagsMask: rule["tcp-flags-mask"],
+      tcpFlagsValue: rule["tcp-flags-value"],
+      icmpFirstType: rule["icmp-first-type"],
+      icmpLastType: rule["icmp-last-type"],
+      icmpFirstCode: rule["icmp-first-code"],
+      icmpLastCode: rule["icmp-last-code"],
+    };
+  }
+
+  private mapAclRuleToApi(rule: AclRule): any {
+    const apiRule: any = {
+      "sequence": rule.sequence,
+      "action": rule.action,
+    };
+
+    if (rule.description) apiRule["acl-rule-description"] = rule.description;
+    if (rule.ipVersion) apiRule["ip-version"] = rule.ipVersion;
+    if (rule.protocol) apiRule["protocol"] = rule.protocol;
+    if (rule.srcIpPrefix) apiRule["src-ip-prefix"] = rule.srcIpPrefix;
+    if (rule.dstIpPrefix) apiRule["dst-ip-prefix"] = rule.dstIpPrefix;
+    if (rule.srcFirstPort !== undefined) apiRule["src-first-port"] = rule.srcFirstPort;
+    if (rule.srcLastPort !== undefined) apiRule["src-last-port"] = rule.srcLastPort;
+    if (rule.dstFirstPort !== undefined) apiRule["dst-first-port"] = rule.dstFirstPort;
+    if (rule.dstLastPort !== undefined) apiRule["dst-last-port"] = rule.dstLastPort;
+    if (rule.tcpFlagsMask !== undefined) apiRule["tcp-flags-mask"] = rule.tcpFlagsMask;
+    if (rule.tcpFlagsValue !== undefined) apiRule["tcp-flags-value"] = rule.tcpFlagsValue;
+    if (rule.icmpFirstType !== undefined) apiRule["icmp-first-type"] = rule.icmpFirstType;
+    if (rule.icmpLastType !== undefined) apiRule["icmp-last-type"] = rule.icmpLastType;
+    if (rule.icmpFirstCode !== undefined) apiRule["icmp-first-code"] = rule.icmpFirstCode;
+    if (rule.icmpLastCode !== undefined) apiRule["icmp-last-code"] = rule.icmpLastCode;
+
+    return apiRule;
+  }
+
+  async bgpShow(input: BgpShowInput): Promise<ApiResponse<string>> {
+    try {
+      const payload: any = {
+        "netgate-bgp:input": {
+          "netgate-bgp:request": input.request
+        }
+      };
+
+      if (input.param) payload["netgate-bgp:input"]["netgate-bgp:param"] = input.param;
+      if (input.peer) payload["netgate-bgp:input"]["netgate-bgp:peer"] = input.peer;
+      if (input.family) payload["netgate-bgp:input"]["netgate-bgp:family"] = input.family;
+      if (input.net) payload["netgate-bgp:input"]["netgate-bgp:net"] = input.net;
+      if (input.param2) payload["netgate-bgp:input"]["netgate-bgp:param2"] = input.param2;
+      if (input.vrfId) payload["netgate-bgp:input"]["netgate-bgp:vrf-id"] = input.vrfId;
+
+
+      const response = await this.api.post(
+        "/restconf/operations/netgate-bgp:bgp-show",
+        payload
+      );
+      const output = response.data?.["netgate-bgp:output"];
+      const stdout = output?.["netgate-bgp:stdout"] || output?.stdout || "";
+
+      return {
+        success: true,
+        data: stdout,
+        message: "BGP Show command executed successfully",
       };
     } catch (error: any) {
       return {
